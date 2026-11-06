@@ -1,12 +1,16 @@
 .{
     .name = .zmosh,
-    .version = "0.6.0",
+    .version = "1.0.0",
     .fingerprint = 0xb8fc6fef1ce2aca5,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .zmx = .{
-            .url = "git+https://github.com/neurosnap/zmx#7f0ffdb999833a1817dd3c6222c269d4ed4a7548",
-            .hash = "zmx-0.8.1-TisFBQe8BQDxLVfYzi2QI4gm91wxXZmy3tJPSZgGr-TC",
+            .url = "git+https://github.com/neurosnap/zmx#35693380d1c1f6107065e52592b1bc874688bc89",
+            .hash = "zmx-1.0.0-TisFBRnJBQAbIp5PQB7-21zco5G8QJoKtvndzlxG2wr2",
+        },
+        .translate_c = .{
+            .url = "git+https://codeberg.org/ziglang/translate-c?ref=zig-0.17.x#cfac21f3199b2b02ce3fd7db652aa456421fe4ab",
+            .hash = "translate_c-2.0.2-Q_BUWvBNBwDnyehSiuAJmdFcMYHYGA-Jc3KiYdrV2Dqx",
         },
     },
     .paths = .{

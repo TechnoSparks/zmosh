@@ -124,7 +124,7 @@ pub fn resolveTargetHost(alloc: std.mem.Allocator, io: std.Io, host: []const u8)
         if (std.fmt.bufPrint(&msg_buf, "zmosh: querying ssh -G to resolve alias '{s}'\n", .{host})) |m| _ = p.write(2, m) catch 0 else |_| {}
     }
 
-    const host_z = try alloc.dupeZ(u8, host);
+    const host_z = try alloc.dupeSentinel(u8, host, 0);
     defer alloc.free(host_z);
 
     const pipe = try p.pipe2(.{ .CLOEXEC = true });
@@ -184,11 +184,11 @@ pub fn connectRemote(alloc: std.mem.Allocator, io: std.Io, host: []const u8, ses
     // resolution takes precedence for NAT and jump hosts.
     const command = try std.fmt.allocPrintSentinel(alloc, "TERM={s} COLORTERM={s} PATH=\"$PATH:/usr/local/bin:/opt/homebrew/bin:$HOME/bin:$HOME/.local/bin\" zmosh serve {s} && {{ set -f; set -- $SSH_CONNECTION; printf 'ZMOSH_ADDRESS %s\\n' \"$3\"; }}", .{ term, color, name }, 0);
     defer alloc.free(command);
-    const host_z = try alloc.dupeZ(u8, host);
+    const host_z = try alloc.dupeSentinel(u8, host, 0);
     defer alloc.free(host_z);
 
     const debug = p.getenv("ZMOSH_DEBUG") != null;
-    var argv_buf = [_:null]?[*:0]const u8{null} ** 14;
+    var argv_buf: [14:null]?[*:0]const u8 = @splat(null);
     var argc: usize = 0;
     argv_buf[argc] = "ssh";
     argc += 1;
@@ -207,7 +207,7 @@ pub fn connectRemote(alloc: std.mem.Allocator, io: std.Io, host: []const u8, ses
     if (p.getenv("ZMOSH_SSH_PORT")) |port| {
         const port_num = std.fmt.parseInt(u16, port, 10) catch return error.InvalidPort;
         if (port_num == 0) return error.InvalidPort;
-        port_z = try alloc.dupeZ(u8, port);
+        port_z = try alloc.dupeSentinel(u8, port, 0);
         argv_buf[argc] = "-p";
         argc += 1;
         argv_buf[argc] = port_z.?;
@@ -287,7 +287,7 @@ pub fn connectRemote(alloc: std.mem.Allocator, io: std.Io, host: []const u8, ses
 pub fn startGateway(alloc: std.mem.Allocator, io: std.Io, session: []const u8) !void {
     const executable = try std.process.executablePathAlloc(io, alloc);
     defer alloc.free(executable);
-    const name = try alloc.dupeZ(u8, session);
+    const name = try alloc.dupeSentinel(u8, session, 0);
     defer alloc.free(name);
     const argv = [_:null]?[*:0]const u8{ executable, "--gateway", name };
     const pipe = try p.pipe2(.{ .CLOEXEC = true });
@@ -315,7 +315,7 @@ test "shell quote protects literal metacharacters and apostrophes" {
 }
 
 test "connect record rejects malformed port key and trailing fields" {
-    const key = crypto.keyToBase64(.{0} ** 32);
+    const key = crypto.keyToBase64(@as([32]u8, @splat(0)));
     var buf: [128]u8 = undefined;
     const valid = try std.fmt.bufPrint(&buf, "ZMX_CONNECT udp 1234 {s}\n", .{key});
     try std.testing.expectEqual(@as(u16, 1234), (try parseConnectLine(valid)).port);

@@ -13,7 +13,7 @@ pub const Message = struct { tag: Tag, data: []const u8 };
 pub fn encode(tag: Tag, data: []const u8, out: []u8) ![]const u8 {
     if (data.len > max_payload or out.len < header_len + data.len) return error.MessageTooLarge;
     @memset(out[0..header_len], 0);
-    out[0] = @intFromEnum(tag);
+    out[0] = @backingInt(tag);
     std.mem.writeInt(u32, out[1..5], @intCast(data.len), .little);
     @memcpy(out[header_len..][0..data.len], data);
     return out[0 .. header_len + data.len];
@@ -94,7 +94,7 @@ pub const NativeFrame = struct {
 };
 
 test "remote terminal end cannot become native Switch" {
-    try std.testing.expectEqual(@as(u8, 11), @intFromEnum(zmx.ipc.Tag.Switch));
+    try std.testing.expectEqual(@as(u8, 11), @backingInt(zmx.ipc.Tag.Switch));
     var out: std.ArrayList(u8) = .empty;
     defer out.deinit(std.testing.allocator);
     try std.testing.expectError(error.ForbiddenMessage, appendNative(std.testing.allocator, &out, .{ .tag = .SessionEnd, .data = "" }));
@@ -137,6 +137,6 @@ test "wire rejects unknown tags, truncation and trailing bytes" {
     const encoded = try encode(.Input, "hello", &bytes);
     try std.testing.expectEqualStrings("hello", (try decode(encoded)).data);
     try std.testing.expectError(error.InvalidLength, decode(encoded[0 .. encoded.len - 1]));
-    bytes[0] = @intFromEnum(zmx.ipc.Tag.Kill);
+    bytes[0] = @backingInt(zmx.ipc.Tag.Kill);
     try std.testing.expectError(error.UnknownTag, decode(encoded));
 }

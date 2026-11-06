@@ -195,7 +195,7 @@ pub fn writeHeader(dst: []u8, channel: Channel, seq: u32, ack: u32, ack_bits: u3
     std.debug.assert(payload_len <= std.math.maxInt(u16));
 
     dst[0] = version;
-    dst[1] = @intFromEnum(channel);
+    dst[1] = @backingInt(channel);
     dst[2] = 0;
     dst[3] = 0;
 
@@ -325,7 +325,7 @@ pub const OrderedRecv = struct {
         len: usize = 0,
         bytes: [max_payload_len]u8 = undefined,
     };
-    slots: [32]Slot = .{Slot{}} ** 32,
+    slots: [32]Slot = @splat(Slot{}),
     next_seq: u64 = 1,
     received: RecvState = .{},
 
@@ -385,7 +385,7 @@ test "full receive window retains every packet until explicit drain" {
 
 test "oversize receive is never acknowledged" {
     var receiver = OrderedRecv{};
-    const oversized = [_]u8{0} ** (max_payload_len + 1);
+    const oversized: [max_payload_len + 1]u8 = @splat(0);
     try std.testing.expectError(error.PayloadTooLarge, receiver.accept(1, &oversized));
     try std.testing.expectEqual(@as(u32, 0), receiver.ack());
     try std.testing.expect(receiver.peek() == null);

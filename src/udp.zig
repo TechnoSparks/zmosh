@@ -63,9 +63,9 @@ pub const UdpSocket = struct {
         var port = port_start;
         while (port < port_end) : (port += 1) {
             const addr = if (family == posix.AF.INET6)
-                Address.initIp6(.{0} ** 16, port, 0, 0)
+                Address.initIp6(@as([16]u8, @splat(0)), port, 0, 0)
             else
-                Address.initIp4(.{0} ** 4, port);
+                Address.initIp4(@as([4]u8, @splat(0)), port);
             posix.bind(fd, @ptrCast(&addr.any), addr.getOsSockLen()) catch |err| switch (err) {
                 error.AddressInUse => continue,
                 else => return err,
@@ -472,12 +472,7 @@ test "RTT estimation basic sanity" {
     try std.testing.expect(peer.srtt_us.? == 95_937);
 }
 
-const c = @cImport({
-    @cInclude("sys/socket.h");
-    @cInclude("netinet/in.h");
-    @cInclude("netdb.h");
-    @cInclude("sys/resource.h");
-});
+const c = @import("cross");
 
 pub const Address = extern union {
     any: posix.sockaddr.storage,
@@ -507,7 +502,7 @@ pub const Address = extern union {
         @memcpy(name[0..host.len], host);
         name[host.len] = 0;
         var service: [6]u8 = undefined;
-        const service_z = try std.fmt.bufPrintZ(&service, "{d}", .{port});
+        const service_z = try std.fmt.bufPrintSentinel(&service, "{d}", .{port}, 0);
         var hints = std.mem.zeroes(c.struct_addrinfo);
         hints.ai_family = c.AF_UNSPEC;
         hints.ai_socktype = c.SOCK_DGRAM;
@@ -578,7 +573,7 @@ test "resolve numeric and local host addresses" {
 }
 
 test "forged high sequence cannot poison replay state or roam authenticated peer" {
-    const key = [_]u8{0x41} ** crypto.key_length;
+    const key = @as([crypto.key_length]u8, @splat(0x41));
     var peer = Peer.init(key, .to_client, 0);
     var receiver = try testBindIp4(61140, 61150);
     defer receiver.close();

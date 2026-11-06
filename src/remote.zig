@@ -311,7 +311,7 @@ test "remote failure reason is bounded and terminal safe" {
     try std.testing.expectEqualStrings("NativeReadPauseTimeout", failure.bytes[0..failure.len]);
     failure.set("bad\x1b[2J\n\r\x00\xff");
     try std.testing.expectEqualStrings("bad??2J????", failure.bytes[0..failure.len]);
-    failure.set(&(.{'x'} ** 200));
+    failure.set(&@as([200]u8, @splat('x')));
     try std.testing.expectEqual(@as(usize, 96), failure.len);
 }
 
@@ -319,7 +319,7 @@ test "remote failure diagnostic never blocks on full pipe and restores flags" {
     const pipe = try p.pipe2(.{ .CLOEXEC = true, .NONBLOCK = true });
     defer p.close(pipe[0]);
     defer p.close(pipe[1]);
-    const chunk = [_]u8{'x'} ** 4096;
+    const chunk: [4096]u8 = @splat('x');
     while (true) {
         _ = p.write(pipe[1], &chunk) catch |err| switch (err) {
             error.WouldBlock => break,
@@ -345,7 +345,7 @@ fn tickLink(link: *link_mod.Link, now: i64, ended_at: ?i64) !void {
 test "terminal ACK repeats within exit grace after first ACK is lost" {
     const crypto = @import("crypto.zig");
     const transport = @import("transport.zig");
-    const key = [_]u8{0x42} ** crypto.key_length;
+    const key = @as([crypto.key_length]u8, @splat(0x42));
     var sink = try udp.UdpSocket.bind(61170, 61180);
     defer sink.close();
     const address = udp.Address.initIp4(.{ 127, 0, 0, 1 }, sink.bound_port);

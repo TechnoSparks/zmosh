@@ -1,8 +1,16 @@
 const std = @import("std");
+const Translator = @import("translate_c").Translator;
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    const translate_c = b.dependency("translate_c", .{});
+    const translator: Translator = .init(translate_c, .{
+        .c_source_file = b.path("src/c.h"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     const zmx = b.dependency("zmx", .{
         .target = target,
@@ -14,6 +22,12 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .link_libc = true,
+        .imports = &.{
+            .{
+                .name = "cross",
+                .module = translator.mod,
+            },
+        },
     });
     exe_mod.addImport("libzmx", zmx.module("zmx"));
     exe_mod.addImport("zmx", zmx.module("zmx"));
@@ -27,7 +41,7 @@ pub fn build(b: *std.Build) void {
     // Run step
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| run_cmd.addArgs(args);
+    run_cmd.addPassthruArgs();
     b.step("run", "Run zmosh").dependOn(&run_cmd.step);
 
     // Test step
@@ -36,6 +50,12 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .link_libc = true,
+        .imports = &.{
+            .{
+                .name = "cross",
+                .module = translator.mod,
+            },
+        },
     });
     test_mod.addImport("libzmx", zmx.module("zmx"));
     test_mod.addImport("zmx", zmx.module("zmx"));

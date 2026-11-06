@@ -293,7 +293,7 @@ fn notifyFailure(link: *link_mod.Link, io: std.Io, reason: []const u8) void {
 
 test "gateway forwards cap-sized snapshot incrementally without dropping final bytes" {
     const alloc = std.testing.allocator;
-    var link = try link_mod.Link.init(alloc, try udp.UdpSocket.bindClient(udp.Address.initIp4(.{ 127, 0, 0, 1 }, 60000)), .{0} ** crypto.key_length, .to_client, 0);
+    var link = try link_mod.Link.init(alloc, try udp.UdpSocket.bindClient(udp.Address.initIp4(.{ 127, 0, 0, 1 }, 60000)), @as([crypto.key_length]u8, @splat(0)), .to_client, 0);
     defer link.deinit();
     var g = Gateway{ .alloc = alloc, .link = &link, .native_progress = 0, .phase = .streaming };
     defer g.deinit();
@@ -326,7 +326,7 @@ test "gateway forwards cap-sized snapshot incrementally without dropping final b
 
 test "gateway bounded native admission and deferred size handoff" {
     const alloc = std.testing.allocator;
-    var link = try link_mod.Link.init(alloc, try udp.UdpSocket.bindClient(udp.Address.initIp4(.{ 127, 0, 0, 1 }, 60000)), .{0} ** crypto.key_length, .to_client, 0);
+    var link = try link_mod.Link.init(alloc, try udp.UdpSocket.bindClient(udp.Address.initIp4(.{ 127, 0, 0, 1 }, 60000)), @as([crypto.key_length]u8, @splat(0)), .to_client, 0);
     defer link.deinit();
     var g = Gateway{ .alloc = alloc, .link = &link, .native_progress = 0, .phase = .streaming };
     defer g.deinit();
@@ -354,7 +354,7 @@ test "gateway bounded native admission and deferred size handoff" {
 
 test "gateway read pause uses hysteresis and a fixed two second deadline" {
     const alloc = std.testing.allocator;
-    var link = try link_mod.Link.init(alloc, try udp.UdpSocket.bindClient(udp.Address.initIp4(.{ 127, 0, 0, 1 }, 60000)), .{0} ** crypto.key_length, .to_client, 0);
+    var link = try link_mod.Link.init(alloc, try udp.UdpSocket.bindClient(udp.Address.initIp4(.{ 127, 0, 0, 1 }, 60000)), @as([crypto.key_length]u8, @splat(0)), .to_client, 0);
     defer link.deinit();
     var g = Gateway{ .alloc = alloc, .link = &link, .native_progress = 0, .phase = .streaming };
     defer g.deinit();
@@ -371,7 +371,7 @@ test "gateway read pause uses hysteresis and a fixed two second deadline" {
 
 test "gateway drains final readable frame before EOF and rejects partial final frame" {
     const alloc = std.testing.allocator;
-    var link = try link_mod.Link.init(alloc, try udp.UdpSocket.bindClient(udp.Address.initIp4(.{ 127, 0, 0, 1 }, 60000)), .{0} ** crypto.key_length, .to_client, 0);
+    var link = try link_mod.Link.init(alloc, try udp.UdpSocket.bindClient(udp.Address.initIp4(.{ 127, 0, 0, 1 }, 60000)), @as([crypto.key_length]u8, @splat(0)), .to_client, 0);
     defer link.deinit();
     for ([_]bool{ false, true }) |partial| {
         var g = Gateway{ .alloc = alloc, .link = &link, .native_progress = 0, .phase = .streaming };
@@ -399,7 +399,7 @@ test "gateway drains final readable frame before EOF and rejects partial final f
 
 test "gateway primes only first Init and retains later input behind processing barrier" {
     const alloc = std.testing.allocator;
-    var link = try link_mod.Link.init(alloc, try udp.UdpSocket.bindClient(udp.Address.initIp4(.{ 127, 0, 0, 1 }, 60000)), .{0} ** crypto.key_length, .to_client, 0);
+    var link = try link_mod.Link.init(alloc, try udp.UdpSocket.bindClient(udp.Address.initIp4(.{ 127, 0, 0, 1 }, 60000)), @as([crypto.key_length]u8, @splat(0)), .to_client, 0);
     defer link.deinit();
     var g = Gateway{ .alloc = alloc, .link = &link, .native_progress = 0 };
     defer g.deinit();

@@ -139,7 +139,7 @@ test "queue retains exact bytes across partial sink writes and compaction" {
 
 test "authenticated liveness cannot extend a stalled reliable stream" {
     const address = udp.Address.initIp4(.{ 127, 0, 0, 1 }, 60000);
-    var link = try Link.init(std.testing.allocator, try udp.UdpSocket.bindClient(address), .{0} ** crypto.key_length, .to_server, 0);
+    var link = try Link.init(std.testing.allocator, try udp.UdpSocket.bindClient(address), @as([crypto.key_length]u8, @splat(0)), .to_server, 0);
     defer link.deinit();
     _ = try link.send.buildAndTrack(.reliable_ipc, "retained", 0, 0, 0);
     link.peer.last_recv_time = progress_timeout_ns;
@@ -148,7 +148,7 @@ test "authenticated liveness cannot extend a stalled reliable stream" {
 
 test "exhausted reliable sequence fails instead of silently stalling queued data" {
     const address = udp.Address.initIp4(.{ 127, 0, 0, 1 }, 60000);
-    var link = try Link.init(std.testing.allocator, try udp.UdpSocket.bindClient(address), .{0} ** crypto.key_length, .to_server, 0);
+    var link = try Link.init(std.testing.allocator, try udp.UdpSocket.bindClient(address), @as([crypto.key_length]u8, @splat(0)), .to_server, 0);
     defer link.deinit();
     link.peer.addr = address;
     link.send.next_seq = @as(u64, std.math.maxInt(u32)) + 1;
@@ -158,7 +158,7 @@ test "exhausted reliable sequence fails instead of silently stalling queued data
 
 test "lost terminal packet retransmits with fresh nonce and retains ordered SessionEnd" {
     const alloc = std.testing.allocator;
-    const key = [_]u8{0x31} ** crypto.key_length;
+    const key = @as([crypto.key_length]u8, @splat(0x31));
     var sink = try udp.UdpSocket.bind(61100, 61110);
     defer sink.close();
     const address = udp.Address.initIp4(.{ 127, 0, 0, 1 }, sink.bound_port);
@@ -198,7 +198,7 @@ test "lost terminal packet retransmits with fresh nonce and retains ordered Sess
 
 test "authenticated heartbeat traffic cannot extend oldest reliable progress deadline" {
     const alloc = std.testing.allocator;
-    const key = [_]u8{0x32} ** crypto.key_length;
+    const key = @as([crypto.key_length]u8, @splat(0x32));
     var receiver = try Link.init(alloc, try udp.UdpSocket.bind(61110, 61120), key, .to_client, 0);
     defer receiver.deinit();
     const address = udp.Address.initIp4(.{ 127, 0, 0, 1 }, receiver.socket.bound_port);
@@ -225,7 +225,7 @@ test "authenticated heartbeat traffic cannot extend oldest reliable progress dea
 
 test "losing all terminal packets eventually triggers independent dead peer deadline" {
     const address = udp.Address.initIp4(.{ 127, 0, 0, 1 }, 61130);
-    var client = try Link.init(std.testing.allocator, try udp.UdpSocket.bindClient(address), .{0} ** crypto.key_length, .to_server, 0);
+    var client = try Link.init(std.testing.allocator, try udp.UdpSocket.bindClient(address), @as([crypto.key_length]u8, @splat(0)), .to_server, 0);
     defer client.deinit();
     // No terminal record was retained and no reliable client data is pending.
     // Last authenticated traffic remains the reference even when local ticks
@@ -237,7 +237,7 @@ test "losing all terminal packets eventually triggers independent dead peer dead
 }
 
 test "unknown authenticated wire tag is rejected without receive admission" {
-    const key = [_]u8{0x33} ** crypto.key_length;
+    const key = @as([crypto.key_length]u8, @splat(0x33));
     var receiver = try Link.init(std.testing.allocator, try udp.UdpSocket.bind(61130, 61140), key, .to_client, 0);
     defer receiver.deinit();
     const address = udp.Address.initIp4(.{ 127, 0, 0, 1 }, receiver.socket.bound_port);
@@ -245,7 +245,7 @@ test "unknown authenticated wire tag is rejected without receive admission" {
     defer source.close();
     var peer = udp.Peer.init(key, .to_server, 0);
     peer.addr = address;
-    var message: [wire.header_len]u8 = .{0} ** wire.header_len;
+    var message: [wire.header_len]u8 = @splat(0);
     message[0] = 255;
     var buf: [128]u8 = undefined;
     try peer.send(&source, try transport.buildUnreliable(.reliable_ipc, 1, 0, 0, &message, &buf), 1);
@@ -258,7 +258,7 @@ test "unknown authenticated wire tag is rejected without receive admission" {
 
 test "isolated route outage retains reliable data and recovers with fresh nonce" {
     if (posix.getenv("ZMOSH_TEST_NO_ROUTE") == null) return error.SkipZigTest;
-    const key = [_]u8{0x55} ** crypto.key_length;
+    const key = @as([crypto.key_length]u8, @splat(0x55));
     const unavailable_address = udp.Address.initIp4(.{ 192, 0, 2, 1 }, 60000);
     var link = try Link.init(std.testing.allocator, try udp.UdpSocket.bindClient(unavailable_address), key, .to_server, 0);
     defer link.deinit();

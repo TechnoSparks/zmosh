@@ -51,8 +51,8 @@ pub fn keyFromBase64(encoded: []const u8) !Key {
 /// Build a 24-byte XChaCha20 nonce from direction + sequence.
 /// First 16 bytes are zero; last 8 bytes are big-endian (direction bit | seq).
 pub fn buildNonce(direction: Direction, sequence: u63) Nonce {
-    const val: u64 = (@as(u64, @intFromEnum(direction)) << 63) | @as(u64, sequence);
-    var nonce: Nonce = .{0} ** nonce_length;
+    const val: u64 = (@as(u64, @backingInt(direction)) << 63) | @as(u64, sequence);
+    var nonce: Nonce = @splat(0);
     std.mem.writeInt(u64, nonce[16..24], val, .big);
     return nonce;
 }
@@ -64,7 +64,7 @@ fn noncePrefix(nonce: Nonce) [8]u8 {
 
 /// Rebuild a full 24-byte nonce from an 8-byte prefix (zero-pad first 16 bytes).
 fn nonceFromPrefix(prefix: [8]u8) Nonce {
-    var nonce: Nonce = .{0} ** nonce_length;
+    var nonce: Nonce = @splat(0);
     nonce[16..24].* = prefix;
     return nonce;
 }
@@ -117,7 +117,7 @@ pub fn decodeDatagram(key: Key, expected_direction: Direction, datagram: []const
     // Extract direction + seq from the prefix.
     const val = std.mem.readInt(u64, &prefix, .big);
     const dir_bit: u1 = @truncate(val >> 63);
-    if (dir_bit != @intFromEnum(expected_direction)) return error.DirectionMismatch;
+    if (dir_bit != @backingInt(expected_direction)) return error.DirectionMismatch;
     const seq: u63 = @truncate(val);
 
     const ct_with_tag = datagram[8..];
