@@ -45,11 +45,31 @@ fn nanoNow() i64 {
     return @as(i64, ts.sec) * std.time.ns_per_s + @as(i64, ts.nsec);
 }
 
-// Bionic compatibility shim: musl calls __errno_location(), Android exports __errno()
+// Bionic compatibility shims:
+// 1. musl calls __errno_location(), Android exports __errno()
 extern "c" fn __errno() *c_int;
 
 export fn __errno_location() *c_int {
     return __errno();
+}
+
+// 2. copy_file_range is not provided by Android Bionic before API 34.
+// Provide fallback via Linux syscall for Android targets.
+export fn copy_file_range(
+    fd_in: c_int,
+    off_in: ?*i64,
+    fd_out: c_int,
+    off_out: ?*i64,
+    len: usize,
+    flags: c_uint,
+) isize {
+    const rc = std.os.linux.copy_file_range(fd_in, off_in, fd_out, off_out, len, flags);
+    const signed_rc: isize = @bitCast(rc);
+    if (signed_rc < 0 and signed_rc > -4096) {
+        __errno().* = @intCast(-signed_rc);
+        return -1;
+    }
+    return signed_rc;
 }
 
 export fn zmosh_connect(
