@@ -45,6 +45,13 @@ fn nanoNow() i64 {
     return @as(i64, ts.sec) * std.time.ns_per_s + @as(i64, ts.nsec);
 }
 
+// Bionic compatibility shim: musl calls __errno_location(), Android exports __errno()
+extern "c" fn __errno() *c_int;
+
+export fn __errno_location() *c_int {
+    return __errno();
+}
+
 export fn zmosh_connect(
     host: ?[*:0]const u8,
     port: u16,
