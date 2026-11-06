@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, zmosh-main ]
+  pull_request:
+    branches: [ main, zmosh-main ]
+
+jobs:
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.14.0
+
+      - name: Run tests
+        run: zig build test

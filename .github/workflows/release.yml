@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build Multi-Platform Binaries & Libraries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.14.0
+
+      - name: Build CLI release tarballs
+        run: zig build release -Dversion=${{ github.ref_name }}
+
+      - name: Build Android shared libraries
+        run: zig build android-lib -Doptimize=ReleaseSafe
+
+      - name: Package Android libraries
+        run: |
+          mkdir -p zig-out/dist
+          tar -czf zig-out/dist/libzmosh-android-${{ github.ref_name }}.tar.gz -C zig-out/android arm64-v8a armeabi-v7a x86_64
+          sha256sum zig-out/dist/libzmosh-android-${{ github.ref_name }}.tar.gz > zig-out/dist/libzmosh-android-${{ github.ref_name }}.tar.gz.sha256
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          name: zmosh ${{ github.ref_name }}
+          files: |
+            zig-out/dist/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
