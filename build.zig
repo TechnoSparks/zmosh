@@ -83,6 +83,40 @@ pub fn build(b: *std.Build) void {
     });
     b.step("check", "Check if zmosh compiles").dependOn(&check_exe.step);
 
+    // Android Shared Library build step: builds libzmosh.so for Android ABIs
+    {
+        const android_step = b.step("android-lib", "Build libzmosh.so for Android ABIs");
+        const android_targets = [_]struct {
+            query: std.Target.Query,
+            abi: []const u8,
+        }{
+            .{ .query = .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl }, .abi = "arm64-v8a" },
+            .{ .query = .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl }, .abi = "x86_64" },
+            .{ .query = .{ .cpu_arch = .arm, .os_tag = .linux, .abi = .musleabihf }, .abi = "armeabi-v7a" },
+        };
+        for (android_targets) |target_info| {
+            const resolved = b.resolveTargetQuery(target_info.query);
+
+            const lib_mod = b.createModule(.{
+                .root_source_file = b.path("src/c_api.zig"),
+                .target = resolved,
+                .optimize = optimize,
+                .link_libc = true,
+            });
+
+            const lib = b.addLibrary(.{
+                .name = "zmosh",
+                .root_module = lib_mod,
+                .linkage = .dynamic,
+            });
+
+            const install_lib = b.addInstallArtifact(lib, .{
+                .dest_dir = .{ .override = .{ .custom = b.fmt("android/{s}", .{target_info.abi}) } },
+            });
+            android_step.dependOn(&install_lib.step);
+        }
+    }
+
     // Multi-platform release step
     {
         const release_step = b.step(

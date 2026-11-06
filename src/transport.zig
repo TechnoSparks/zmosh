@@ -334,7 +334,7 @@ pub const OrderedRecv = struct {
         if (payload.len > max_payload_len) return error.PayloadTooLarge;
         if (seq < self.next_seq) return .duplicate;
         if (@as(u64, seq) - self.next_seq >= self.slots.len) return .stale;
-        const slot = &self.slots[seq % self.slots.len];
+        const slot = &self.slots[@as(usize, @intCast(seq % self.slots.len))];
         if (slot.seq == seq) return .duplicate;
         std.debug.assert(slot.seq == 0);
         @memcpy(slot.bytes[0..payload.len], payload);
@@ -346,13 +346,13 @@ pub const OrderedRecv = struct {
 
     pub fn peek(self: *const OrderedRecv) ?[]const u8 {
         if (self.next_seq > std.math.maxInt(u32)) return null;
-        const slot = &self.slots[self.next_seq % self.slots.len];
+        const slot = &self.slots[@as(usize, @intCast(self.next_seq % self.slots.len))];
         return if (slot.seq == self.next_seq) slot.bytes[0..slot.len] else null;
     }
 
     pub fn pop(self: *OrderedRecv) void {
         std.debug.assert(self.peek() != null);
-        self.slots[self.next_seq % self.slots.len].seq = 0;
+        self.slots[@as(usize, @intCast(self.next_seq % self.slots.len))].seq = 0;
         self.next_seq += 1;
     }
 

@@ -56,7 +56,7 @@ pub const UdpSocket = struct {
 
         if (set_v6only) {
             const v6only: c_int = 0;
-            const result = c.setsockopt(fd, c.IPPROTO_IPV6, c.IPV6_V6ONLY, &v6only, @sizeOf(c_int));
+            const result = c.setsockopt(fd, c.IPPROTO.IPV6, c.IPV6.V6ONLY, &v6only, @sizeOf(c_int));
             if (result != 0) return socketOptionError(std.posix.errno(result));
         }
 
@@ -472,7 +472,7 @@ test "RTT estimation basic sanity" {
     try std.testing.expect(peer.srtt_us.? == 95_937);
 }
 
-const c = @import("cross");
+const c = std.c;
 
 pub const Address = extern union {
     any: posix.sockaddr.storage,
@@ -503,18 +503,18 @@ pub const Address = extern union {
         name[host.len] = 0;
         var service: [6]u8 = undefined;
         const service_z = try std.fmt.bufPrintSentinel(&service, "{d}", .{port}, 0);
-        var hints = std.mem.zeroes(c.struct_addrinfo);
-        hints.ai_family = c.AF_UNSPEC;
-        hints.ai_socktype = c.SOCK_DGRAM;
-        var result: ?*c.struct_addrinfo = null;
-        if (c.getaddrinfo(@ptrCast(&name), service_z.ptr, &hints, &result) != 0) return error.ResolveFailed;
-        defer c.freeaddrinfo(result);
+        var hints = std.mem.zeroes(c.addrinfo);
+        hints.family = c.AF.UNSPEC;
+        hints.socktype = c.SOCK.DGRAM;
+        var result: ?*c.addrinfo = null;
+        if (@intFromEnum(c.getaddrinfo(@ptrCast(&name), service_z.ptr, &hints, &result)) != 0) return error.ResolveFailed;
+        defer if (result) |r| c.freeaddrinfo(r);
         var current = result;
-        while (current) |entry| : (current = entry.ai_next) {
-            if (entry.ai_family != c.AF_INET and entry.ai_family != c.AF_INET6) continue;
+        while (current) |entry| : (current = entry.next) {
+            if (entry.family != c.AF.INET and entry.family != c.AF.INET6) continue;
             var addr = Address{ .any = std.mem.zeroes(posix.sockaddr.storage) };
-            if (entry.ai_addrlen > @sizeOf(Address)) continue;
-            @memcpy(std.mem.asBytes(&addr)[0..entry.ai_addrlen], @as([*]const u8, @ptrCast(entry.ai_addr))[0..entry.ai_addrlen]);
+            if (entry.addrlen > @sizeOf(Address)) continue;
+            @memcpy(std.mem.asBytes(&addr)[0..entry.addrlen], @as([*]const u8, @ptrCast(entry.addr))[0..entry.addrlen]);
             return addr;
         }
         return error.ResolveFailed;
@@ -604,14 +604,12 @@ test "forged high sequence cannot poison replay state or roam authenticated peer
 }
 
 test "socket descriptor exhaustion is reported without family fallback" {
-    var original: c.struct_rlimit = undefined;
-    if (c.getrlimit(c.RLIMIT_NOFILE, &original) != 0) return error.SkipZigTest;
+    const original = std.posix.getrlimit(.NOFILE) catch return error.SkipZigTest;
     var reduced = original;
-    reduced.rlim_cur = 0;
-    if (c.setrlimit(c.RLIMIT_NOFILE, &reduced) != 0) return error.SkipZigTest;
+    reduced.cur = 0;
+    std.posix.setrlimit(.NOFILE, reduced) catch return error.SkipZigTest;
     const result = UdpSocket.bind(61200, 61210);
-    const restored = c.setrlimit(c.RLIMIT_NOFILE, &original);
-    if (restored != 0) return error.RestoreDescriptorLimitFailed;
+    std.posix.setrlimit(.NOFILE, original) catch return error.RestoreDescriptorLimitFailed;
     try std.testing.expectError(error.ProcessFdQuotaExceeded, result);
 }
 

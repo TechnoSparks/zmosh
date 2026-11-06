@@ -15,3 +15,5 @@ prior_art/
 result
 result-*
 .direnv/
+zig-pkg/
+core*

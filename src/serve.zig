@@ -6,6 +6,7 @@ const crypto = @import("crypto.zig");
 const udp = @import("udp.zig");
 const link_mod = @import("link.zig");
 const wire = @import("wire.zig");
+const native = @import("native.zig");
 const runtime = @import("runtime.zig");
 
 const pause_high = 768 * 1024;
@@ -18,10 +19,10 @@ const Gateway = struct {
     prime_started: i64 = 0,
     alloc: std.mem.Allocator,
     link: *link_mod.Link,
-    frame: wire.NativeFrame = .{},
+    frame: native.NativeFrame = .{},
     output_cursor: usize = 0,
     native: link_mod.Queue = .{},
-    size: ?zmx.ipc.Resize = null,
+    size: ?wire.Resize = null,
     resize_requested: bool = false,
     detached: bool = false,
     eof: bool = false,
@@ -42,7 +43,7 @@ const Gateway = struct {
         if (self.native.room() < msg.data.len + 32) return false;
         var encoded: std.ArrayList(u8) = .empty;
         defer encoded.deinit(self.alloc);
-        try wire.appendNative(self.alloc, &encoded, msg);
+        try native.appendNative(self.alloc, &encoded, msg);
         try self.native.append(self.alloc, encoded.items);
         if (msg.tag == .Init or msg.tag == .Resize) self.size = try wire.decodeSize(msg.data);
         if (msg.tag == .Detach) self.detached = true;

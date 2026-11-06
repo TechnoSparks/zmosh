@@ -7,4 +7,6 @@ test {
     _ = @import("link.zig");
     _ = @import("remote.zig");
     _ = @import("serve.zig");
+    _ = @import("native.zig");
+    _ = @import("c_api.zig");
 }
