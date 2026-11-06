@@ -77,6 +77,16 @@ zig build -Doptimize=ReleaseSafe --prefix ~/.local
 | `zig build test` | Run test suite |
 | `zig build check` | Type-check without code generation (for ZLS/LSP) |
 | `zig build release` | Cross-compile release tarballs and SHA256 checksums for Linux and macOS |
+| `zig build android-lib` | Compile shared library `libzmosh.so` for Android (`arm64-v8a`, `armeabi-v7a`, `x86_64`) |
+
+## mobile app (zmosh-app)
+
+Looking for a mobile client? Check out [**zmosh-app**](https://github.com/matthyx/zmosh-app) — a cross-platform mobile terminal app for Android (and iOS) powered by `libzmosh` and `xterm.dart`.
+
+- Connect directly to remote `zmx` sessions from your tablet or phone.
+- Built-in SSH bootstrapping and key authentication.
+- Full roaming support over Wi-Fi, cellular, and network switches.
+- Pre-built Android APKs available in [zmosh-app Releases](https://github.com/matthyx/zmosh-app/releases).
 
 ### libzmosh (C library)
 
