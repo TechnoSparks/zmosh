@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .zmx = .{
-            .url = "git+https://github.com/neurosnap/zmx#35693380d1c1f6107065e52592b1bc874688bc89",
-            .hash = "zmx-1.0.0-TisFBRnJBQAbIp5PQB7-21zco5G8QJoKtvndzlxG2wr2",
+            .url = "git+https://github.com/neurosnap/zmx#a35f00a2118b15a5e9d522a43035c8d7487df9b7",
+            .hash = "zmx-1.0.1-TisFBfzJBQCW5J_v-Hh9M0PmXja3xLCspIYVRKkNy1HZ",
         },
         .translate_c = .{
             .url = "git+https://codeberg.org/ziglang/translate-c?ref=zig-0.17.x#cfac21f3199b2b02ce3fd7db652aa456421fe4ab",
