@@ -480,11 +480,26 @@ pub const Address = extern union {
     in6: posix.sockaddr.in6,
 
     pub fn initIp4(bytes: [4]u8, port: u16) Address {
-        return .{ .in = .{ .port = std.mem.nativeToBig(u16, port), .addr = @bitCast(bytes) } };
+        var addr = Address{ .any = std.mem.zeroes(posix.sockaddr.storage) };
+        addr.in = .{
+            .family = posix.AF.INET,
+            .port = std.mem.nativeToBig(u16, port),
+            .addr = @bitCast(bytes),
+            .zero = std.mem.zeroes([8]u8),
+        };
+        return addr;
     }
 
     pub fn initIp6(bytes: [16]u8, port: u16, flowinfo: u32, scope_id: u32) Address {
-        return .{ .in6 = .{ .port = std.mem.nativeToBig(u16, port), .addr = bytes, .flowinfo = flowinfo, .scope_id = scope_id } };
+        var addr = Address{ .any = std.mem.zeroes(posix.sockaddr.storage) };
+        addr.in6 = .{
+            .family = posix.AF.INET6,
+            .port = std.mem.nativeToBig(u16, port),
+            .addr = bytes,
+            .flowinfo = flowinfo,
+            .scope_id = scope_id,
+        };
+        return addr;
     }
 
     pub fn getPort(self: Address) u16 {
@@ -495,9 +510,20 @@ pub const Address = extern union {
         return if (self.any.family == posix.AF.INET6) @sizeOf(posix.sockaddr.in6) else @sizeOf(posix.sockaddr.in);
     }
 
-    /// libc resolver accepts numeric addresses and ordinary DNS hostnames.
+    /// Resolver supports numeric IPv4/IPv6 addresses directly and ordinary DNS hostnames via getaddrinfo.
     pub fn resolve(host: []const u8, port: u16) !Address {
         if (host.len == 0 or host.len > 253 or std.mem.indexOfScalar(u8, host, 0) != null) return error.InvalidHost;
+
+        // Try direct IPv4 parse first
+        if (std.Io.net.IpAddress.parseIp4(host, port)) |ip4| {
+            return initIp4(ip4.ip4.bytes, port);
+        } else |_| {}
+
+        // Try direct IPv6 parse
+        if (std.Io.net.IpAddress.parseIp6(host, port)) |ip6| {
+            return initIp6(ip6.ip6.bytes, port, ip6.ip6.flow, ip6.ip6.interface.index);
+        } else |_| {}
+
         var name: [254]u8 = undefined;
         @memcpy(name[0..host.len], host);
         name[host.len] = 0;
@@ -509,13 +535,36 @@ pub const Address = extern union {
         var result: ?*c.addrinfo = null;
         if (@intFromEnum(c.getaddrinfo(@ptrCast(&name), service_z.ptr, &hints, &result)) != 0) return error.ResolveFailed;
         defer if (result) |r| c.freeaddrinfo(r);
+
+        const BionicAddrInfo = extern struct {
+            flags: c_int,
+            family: c_int,
+            socktype: c_int,
+            protocol: c_int,
+            addrlen: posix.socklen_t,
+            canonname: ?[*:0]u8,
+            addr: ?*posix.sockaddr,
+            next: ?*anyopaque,
+        };
+
         var current = result;
-        while (current) |entry| : (current = entry.next) {
-            if (entry.family != c.AF.INET and entry.family != c.AF.INET6) continue;
-            var addr = Address{ .any = std.mem.zeroes(posix.sockaddr.storage) };
-            if (entry.addrlen > @sizeOf(Address)) continue;
-            @memcpy(std.mem.asBytes(&addr)[0..entry.addrlen], @as([*]const u8, @ptrCast(entry.addr))[0..entry.addrlen]);
-            return addr;
+        while (current) |entry| {
+            const actual_addr: ?*posix.sockaddr = if (entry.addr) |a|
+                a
+            else if (@as(*const BionicAddrInfo, @ptrCast(entry)).addr) |ba|
+                ba
+            else
+                null;
+
+            if (actual_addr) |sa| {
+                if (sa.family == posix.AF.INET or sa.family == posix.AF.INET6) {
+                    var addr = Address{ .any = std.mem.zeroes(posix.sockaddr.storage) };
+                    const copy_len = @min(entry.addrlen, @sizeOf(Address));
+                    @memcpy(std.mem.asBytes(&addr)[0..copy_len], @as([*]const u8, @ptrCast(sa))[0..copy_len]);
+                    return addr;
+                }
+            }
+            current = entry.next;
         }
         return error.ResolveFailed;
     }
