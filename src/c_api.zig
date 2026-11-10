@@ -37,6 +37,7 @@ pub const Session = struct {
     ctx: ?*anyopaque,
     last_state: udp.PeerState,
     session_ended: bool,
+    in_poll: bool,
 };
 
 fn nanoNow() i64 {
@@ -157,6 +158,7 @@ export fn zmosh_connect(
         .ctx = ctx,
         .last_state = .connected,
         .session_ended = false,
+        .in_poll = false,
     };
 
     set_status(status, .ok);
@@ -171,6 +173,9 @@ export fn zmosh_get_fd(session: ?*const Session) c_int {
 export fn zmosh_poll(session: ?*Session) Status {
     const s = session orelse return .err_null;
     if (s.session_ended) return .ok;
+    if (s.in_poll) return .ok;
+    s.in_poll = true;
+    defer s.in_poll = false;
 
     const now = nanoNow();
 
@@ -182,10 +187,15 @@ export fn zmosh_poll(session: ?*Session) Status {
 
     // Process ordered records
     while (s.link.recv.peek()) |payload| {
-        const msg = wire.decode(payload) catch break;
+        const msg = wire.decode(payload) catch {
+            s.link.recv.pop();
+            continue;
+        };
         switch (msg.tag) {
             .Output => {
-                s.output_cb(s.ctx, msg.data.ptr, @intCast(msg.data.len));
+                if (msg.data.len > 0) {
+                    s.output_cb(s.ctx, msg.data.ptr, @intCast(msg.data.len));
+                }
             },
             .SessionEnd => {
                 s.session_ended = true;
