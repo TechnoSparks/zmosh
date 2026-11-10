@@ -14,6 +14,11 @@ pub const RemoteSession = struct {
         std.crypto.secureZero(u8, &self.key);
     }
 };
+
+/// `ssh -G` prints the full effective configuration. Its size is bounded by
+/// the user's SSH config, but it routinely exceeds the small bootstrap records.
+const ssh_config_max = 64 * 1024;
+
 pub const Connect = struct { port: u16, key: crypto.Key };
 pub fn parseConnectLine(line: []const u8) !Connect {
     const record = if (std.mem.endsWith(u8, line, "\n")) line[0 .. line.len - 1] else line;
@@ -101,6 +106,23 @@ fn reap(io: std.Io, pid: p.pid_t, deadline: i64) !void {
     }
 }
 
+fn isNumericHost(host: []const u8) bool {
+    if (std.Io.net.IpAddress.parseIp4(host, 0)) |_| return true else |_| {}
+    if (std.Io.net.IpAddress.parseIp6(host, 0)) |_| return true else |_| {}
+    return false;
+}
+
+fn parseHostname(output: []const u8) ?[]const u8 {
+    var it = std.mem.splitScalar(u8, output, '\n');
+    while (it.next()) |line| {
+        const prefix = "hostname ";
+        if (!std.mem.startsWith(u8, line, prefix)) continue;
+        const resolved = std.mem.trimEnd(u8, line[prefix.len..], "\r ");
+        if (resolved.len > 0) return resolved;
+    }
+    return null;
+}
+
 pub fn resolveTargetHost(alloc: std.mem.Allocator, io: std.Io, host: []const u8) ![]u8 {
     const debug = p.getenv("ZMOSH_DEBUG") != null;
     const clean_host = if (std.mem.indexOfScalar(u8, host, '@')) |idx| host[idx + 1 ..] else host;
@@ -111,13 +133,15 @@ pub fn resolveTargetHost(alloc: std.mem.Allocator, io: std.Io, host: []const u8)
         if (std.fmt.bufPrint(&msg_buf, "zmosh: resolving target host for '{s}'\n", .{clean_host})) |m| _ = p.write(2, m) catch 0 else |_| {}
     }
 
-    if (udp.Address.resolve(clean_host, 1)) |_| {
+    // Numeric addresses need no alias lookup. Check this before `ssh -G` so an
+    // IP host never depends on the local resolver or SSH config.
+    if (isNumericHost(clean_host)) {
         if (debug) {
             var msg_buf: [256]u8 = undefined;
-            if (std.fmt.bufPrint(&msg_buf, "zmosh: host '{s}' resolved directly\n", .{clean_host})) |m| _ = p.write(2, m) catch 0 else |_| {}
+            if (std.fmt.bufPrint(&msg_buf, "zmosh: host '{s}' is numeric\n", .{clean_host})) |m| _ = p.write(2, m) catch 0 else |_| {}
         }
         return try alloc.dupe(u8, clean_host);
-    } else |_| {}
+    }
 
     if (debug) {
         var msg_buf: [256]u8 = undefined;
@@ -144,8 +168,13 @@ pub fn resolveTargetHost(alloc: std.mem.Allocator, io: std.Io, host: []const u8)
     };
 
     const deadline = now(io) + 5_000;
-    var buf: [4096]u8 = undefined;
-    const output = readRecord(io, pipe[0], &buf, deadline) catch {
+    const buf = try alloc.alloc(u8, ssh_config_max);
+    defer alloc.free(buf);
+    const output = readRecord(io, pipe[0], buf, deadline) catch |err| {
+        if (debug) {
+            var msg_buf: [256]u8 = undefined;
+            if (std.fmt.bufPrint(&msg_buf, "zmosh: ssh -G failed: {s}\n", .{@errorName(err)})) |m| _ = p.write(2, m) catch 0 else |_| {}
+        }
         return try alloc.dupe(u8, clean_host);
     };
     reap(io, pid, deadline) catch {
@@ -154,19 +183,12 @@ pub fn resolveTargetHost(alloc: std.mem.Allocator, io: std.Io, host: []const u8)
     };
     reaped = true;
 
-    var it = std.mem.splitScalar(u8, output, '\n');
-    while (it.next()) |line| {
-        const prefix = "hostname ";
-        if (std.mem.startsWith(u8, line, prefix)) {
-            const resolved = std.mem.trimEnd(u8, line[prefix.len..], "\r ");
-            if (resolved.len > 0) {
-                if (debug) {
-                    var msg_buf: [256]u8 = undefined;
-                    if (std.fmt.bufPrint(&msg_buf, "zmosh: ssh -G resolved '{s}' to '{s}'\n", .{ host, resolved })) |m| _ = p.write(2, m) catch 0 else |_| {}
-                }
-                return try alloc.dupe(u8, resolved);
-            }
+    if (parseHostname(output)) |resolved| {
+        if (debug) {
+            var msg_buf: [256]u8 = undefined;
+            if (std.fmt.bufPrint(&msg_buf, "zmosh: ssh -G resolved '{s}' to '{s}'\n", .{ host, resolved })) |m| _ = p.write(2, m) catch 0 else |_| {}
         }
+        return try alloc.dupe(u8, resolved);
     }
 
     return try alloc.dupe(u8, clean_host);
@@ -343,6 +365,13 @@ test "resolveTargetHost resolves numeric IP and strips user prefix" {
     try std.testing.expectError(error.InvalidHost, resolveTargetHost(alloc, io, "user@"));
 }
 
+test "numeric hosts bypass alias lookup" {
+    try std.testing.expect(isNumericHost("127.0.0.1"));
+    try std.testing.expect(isNumericHost("::1"));
+    try std.testing.expect(!isNumericHost("macos"));
+    try std.testing.expect(!isNumericHost("example.com"));
+}
+
 test "bootstrap rejects SSH option-like host before launching" {
     try std.testing.expectError(error.InvalidHost, connectRemote(std.testing.allocator, std.testing.io, "-oProxyCommand=bad", "session"));
 }
@@ -362,6 +391,42 @@ test "bootstrap reader bounds oversized output" {
     _ = try p.write(pipe[1], "12345");
     var buf: [4]u8 = undefined;
     try std.testing.expectError(error.BootstrapTooLarge, readRecord(std.testing.io, pipe[0], &buf, now(std.testing.io) + 100));
+}
+
+test "bootstrap reader accepts ssh -G output larger than 4 KiB" {
+    const alloc = std.testing.allocator;
+    const pipe = try p.pipe2(.{ .CLOEXEC = true });
+    defer p.close(pipe[0]);
+    var write_open = true;
+    defer if (write_open) p.close(pipe[1]);
+
+    const payload = try alloc.alloc(u8, 4 * 1024 + 1);
+    defer alloc.free(payload);
+    @memset(payload, 'x');
+    const marker = "\nhostname 100.76.202.1\n";
+    @memcpy(payload[payload.len - marker.len ..], marker);
+
+    var written: usize = 0;
+    while (written < payload.len) written += try p.write(pipe[1], payload[written..]);
+    p.close(pipe[1]);
+    write_open = false;
+
+    const buf = try alloc.alloc(u8, ssh_config_max);
+    defer alloc.free(buf);
+    const output = try readRecord(std.testing.io, pipe[0], buf, now(std.testing.io) + 1000);
+    try std.testing.expectEqualStrings(payload, output);
+    try std.testing.expectEqualStrings("100.76.202.1", parseHostname(output).?);
+}
+
+test "parseHostname finds the hostname after large ssh -G output" {
+    var output: [8 * 1024]u8 = undefined;
+    @memset(&output, 'x');
+    const marker = "\nhostname 100.76.202.1\r\n";
+    @memcpy(output[output.len - marker.len ..], marker);
+
+    try std.testing.expectEqualStrings("100.76.202.1", parseHostname(&output).?);
+    try std.testing.expectEqualStrings("example.com", parseHostname("host foo\r\nhostname example.com\r\n").?);
+    try std.testing.expect(parseHostname("host foo\n") == null);
 }
 
 test "bootstrap child is reaped after successful and failed exec" {
